@@ -32,12 +32,33 @@ $('search').oninput=render;$('pickSearch').oninput=renderPicker;$('cancelPick').
 $('choosePhoto').onclick=()=>$('camera').click();$('camera').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;setBusy(true);try{photo=await toPhoto(file);photoVersion++;dirty=true;preview()}catch(err){report(err);return}finally{setBusy(false)}await runOCR()};
 $('removePhoto').onclick=async()=>{photoVersion++;photo='';dirty=true;preview();$('ocrStatus').textContent='';if(ocrWorker){const w=ocrWorker;ocrWorker=null;await w.terminate().catch(()=>{})}setBusy(false)};
 $('rotate').onclick=async()=>{try{const img=new Image();img.src=photo;await img.decode();const c=document.createElement('canvas');c.width=img.naturalHeight;c.height=img.naturalWidth;const ctx=c.getContext('2d');ctx.translate(c.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(img,0,0);photo=c.toDataURL('image/jpeg',.9);photoVersion++;dirty=true;preview();toast('写真を回転しました。再読み取りできます')}catch(e){report(e)}};
-$('retryOCR').onclick=runOCR;
+$('retryOCR').onclick=()=>runOCR();
 $('cardForm').onsubmit=async e=>{e.preventDefault();if(busy)return;const data=Object.fromEntries(fields.map(k=>[k,$(k).value.trim()]));if(!data.name){$('name').focus();return}setBusy(true);try{const now=new Date().toISOString();const c={...(editing||{}),...data,photo,createdAt:editing?.createdAt||now,updatedAt:now,exportedAt:null};await transaction('readwrite',s=>s.put(c));dirty=false;$('editor').close();await refresh();toast('名刺を保存しました')}catch(err){report(err)}finally{setBusy(false)}};
 $('delete').onclick=async()=>{if(!editing||!confirm('「'+editing.name+'」を削除しますか？取り消せません。'))return;try{await transaction('readwrite',s=>s.delete(editing.id));dirty=false;$('editor').close();await refresh();toast('削除しました')}catch(e){report(e)}};
 $('exportOne').onclick=()=>{if(dirty){toast('変更を保存してからVCFを書き出してください');return}exportCards([editing]).catch(report)};$('exportPending').onclick=()=>exportCards(cards.filter(pending)).catch(report);
 $('backup').onclick=()=>backup().catch(report);$('restore').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(e.target.files[0])await restore(e.target.files[0])}catch(err){report(err)}finally{e.target.value=''}};$('legacy').onclick=()=>importLegacy().catch(report);
-(async()=>{try{await openDB();await refresh();navigator.storage?.persist?.().catch(()=>{});if('serviceWorker'in navigator&&window.isSecureContext){const reg=await navigator.serviceWorker.register('./sw.js');const update=()=>{$('offline').textContent='オフライン用ファイルを保存中…（初回は時間がかかります）';navigator.serviceWorker.controller?.postMessage({type:'MEISHIBAKO_CHECK_V2'})};navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='MEISHIBAKO_OFFLINE_READY_V2')$('offline').textContent='✓ アプリとOCRをオフラインで利用できます'});update();navigator.serviceWorker.addEventListener('controllerchange',update);reg.addEventListener('updatefound',()=>{const w=reg.installing;w.addEventListener('statechange',()=>{update();if(w.state==='redundant')$('offline').textContent='オフライン保存に失敗しました。通信・空き容量を確認して再読み込みしてください'})})}else $('offline').textContent='オフライン利用にはHTTPSまたはlocalhostで開いてください'}catch(e){$('cards').textContent='保存領域を開けませんでした。ブラウザーの設定をご確認ください。';for(const id of ['addMenu','exportMenu','restore','backup','legacy'])$(id).disabled=true;report(e)}})();
+async function initializeOffline(){
+ const status=$('offline');
+ if(!('serviceWorker'in navigator)||!window.isSecureContext){status.textContent='オンライン保存は利用できます。オフライン利用にはHTTPSが必要です。';return}
+ try{
+  const reg=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+  const check=()=>navigator.serviceWorker.controller?.postMessage({type:'MEISHIBAKO_CHECK_V22'});
+  navigator.serviceWorker.addEventListener('message',e=>{
+   if(e.data?.type==='MEISHIBAKO_OFFLINE_READY_V22')status.textContent='✓ アプリとOCRをオフラインで利用できます';
+   if(e.data?.type==='MEISHIBAKO_CACHE_PROGRESS')status.textContent='オフライン用ファイルを保存中… '+e.data.done+' / '+e.data.total;
+   if(e.data?.type==='MEISHIBAKO_CACHE_ERROR')status.textContent='オフライン保存に失敗：'+e.data.message+'。オンラインで再読み込みしてください。';
+  });
+  const watch=()=>{const w=reg.installing;if(!w)return;w.addEventListener('statechange',()=>{if(w.state==='redundant')status.textContent='オフライン保存に失敗しました。配布ファイル・通信・空き容量を確認してください。';if(w.state==='activated')check()})};
+  reg.addEventListener('updatefound',watch);watch();navigator.serviceWorker.addEventListener('controllerchange',check);check();
+  reg.update().catch(()=>{});
+ }catch(e){status.textContent='オフライン機能の準備に失敗：'+e.message+'。名刺の端末内保存は利用できます。';console.error(e)}
+}
+(async()=>{
+ try{await openDB();await refresh()}
+ catch(e){$('cards').textContent='保存領域を開けませんでした：'+e.message;for(const id of ['addMenu','exportMenu','restore','backup','legacy','save'])$(id).disabled=true;report(e);return}
+ navigator.storage?.persist?.().catch(()=>{});
+ await initializeOffline();
+})();
 
 function confirmExport(){return new Promise(resolve=>{const d=$('exportConfirm');d.returnValue='cancel';d.addEventListener('close',()=>resolve(d.returnValue==='saved'),{once:true});d.showModal()})}
 
