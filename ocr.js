@@ -15,8 +15,8 @@ async function runOCR(){
  const timed=promise=>Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(Error('読み取りの制限時間を超えました。アプリを開き直して再試行してください。'))},90000)})]).finally(()=>clearTimeout(timer));
  try{
   const input=await prepareOCRImage(source);if(token!==photoVersion)return;
-  if(typeof Tesseract==='undefined')throw Error('OCR本体を読み込めません。オンラインで再読み込みし、vendorフォルダが配置されているか確認してください。');
-  const base=new URL('./vendor/',location.href).href;
+  if(typeof Tesseract==='undefined')throw Error('OCR本体を読み込めません。オンラインで再読み込みし、OCR関連ファイルが配置されているか確認してください。');
+  const base=new URL('./',location.href).href;
   $('ocrStatus').textContent='日本語・英語の認識データを準備しています…';
   const pendingWorker=Tesseract.createWorker(['jpn','eng'],1,{workerPath:base+'worker.min.js',corePath:base,langPath:base.slice(0,-1),workerBlobURL:false,logger:m=>{if(token===photoVersion)$('ocrStatus').textContent=m.status==='recognizing text'?'文字を読み取り中… '+Math.round(m.progress*100)+'%':'認識データを準備中… '+Math.round((m.progress||0)*100)+'%'}});
   pendingWorker.then(w=>{if(expired||token!==photoVersion)w.terminate().catch(()=>{})},()=>{});

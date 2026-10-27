@@ -48,7 +48,7 @@ async function initializeOffline(){
    if(e.data?.type==='MEISHIBAKO_CACHE_PROGRESS')status.textContent='オフライン用ファイルを保存中… '+e.data.done+' / '+e.data.total;
    if(e.data?.type==='MEISHIBAKO_CACHE_ERROR')status.textContent='オフライン保存に失敗：'+e.data.message+'。オンラインで再読み込みしてください。';
   });
-  const watch=()=>{const w=reg.installing;if(!w)return;w.addEventListener('statechange',()=>{if(w.state==='redundant')status.textContent='オフライン保存に失敗しました。配布ファイル・通信・空き容量を確認してください。';if(w.state==='activated')check()})};
+  const watch=()=>{const w=reg.installing;if(!w)return;w.addEventListener('statechange',()=>{if(w.state==='redundant'&&!status.textContent.startsWith('オフライン保存に失敗：'))status.textContent='オフライン保存に失敗しました。配布ファイル・通信・空き容量を確認してください。';if(w.state==='activated')check()})};
   reg.addEventListener('updatefound',watch);watch();navigator.serviceWorker.addEventListener('controllerchange',check);check();
   reg.update().catch(()=>{});
  }catch(e){status.textContent='オフライン機能の準備に失敗：'+e.message+'。名刺の端末内保存は利用できます。';console.error(e)}
